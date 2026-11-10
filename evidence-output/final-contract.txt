@@ -1,0 +1,16 @@
+test_01_reason_stays_out_of_public_event (test_contract.Contract.test_01_reason_stays_out_of_public_event) ... ok
+test_02_customer_gets_generic_notification (test_contract.Contract.test_02_customer_gets_generic_notification) ... ok
+test_03_reason_is_retained_in_internal_audit (test_contract.Contract.test_03_reason_is_retained_in_internal_audit) ... ok
+test_04_success_preserves_customer_result (test_contract.Contract.test_04_success_preserves_customer_result) ... ok
+test_05_denied_command_has_no_effects (test_contract.Contract.test_05_denied_command_has_no_effects) ... ok
+test_06_short_reason_has_no_effects (test_contract.Contract.test_06_short_reason_has_no_effects) ... ok
+test_07_missing_customer_has_no_effects (test_contract.Contract.test_07_missing_customer_has_no_effects) ... ok
+test_08_notification_failure_does_not_erase_audit (test_contract.Contract.test_08_notification_failure_does_not_erase_audit) ... ok
+test_09_five_character_reason_is_trimmed_and_audited (test_contract.Contract.test_09_five_character_reason_is_trimmed_and_audited) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.000s
+
+OK
+
+Exit code: 0

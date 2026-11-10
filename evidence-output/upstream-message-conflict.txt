@@ -1,0 +1,35 @@
+............F..........                                                  [100%]
+=================================== FAILURES ===================================
+______________________ test_deactivate_sends_notification ______________________
+
+registration = <northstar.services.CustomerRegistrationService object at 0x1041a80b0>
+lifecycle = <northstar.services.CustomerLifecycleService object at 0x1041a8170>
+notifications = <northstar.notifications.NotificationClient object at 0x1041a8080>
+
+    def test_deactivate_sends_notification(registration, lifecycle, notifications):
+        customer = registration.register(
+            Actor("u1", "admin"),
+            "Jordan Lee",
+            "jordan@example.com",
+        )
+        notifications.sent_messages.clear()
+    
+        lifecycle.deactivate(
+            Actor("u2", "manager"),
+            customer.customer_id,
+            "Duplicate account",
+        )
+>       assert notifications.sent_messages == [
+            ("jordan@example.com", "Your Atlas account has been deactivated: Duplicate account")
+        ]
+E       AssertionError: assert [('jordan@exa...eactivated.')] == [('jordan@exa...ate account')]
+E         
+E         At index 0 diff: ('jordan@example.com', 'Your Atlas account has been deactivated.') != ('jordan@example.com', 'Your Atlas account has been deactivated: Duplicate account')
+E         Use -v to get more diff
+
+tests/test_lifecycle_service.py:34: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_lifecycle_service.py::test_deactivate_sends_notification - ...
+1 failed, 22 passed in 0.04s
+
+Exit code: 1

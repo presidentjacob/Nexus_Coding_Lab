@@ -32,7 +32,7 @@ def test_deactivate_sends_notification(registration, lifecycle, notifications):
         "Duplicate account",
     )
     assert notifications.sent_messages == [
-        ("jordan@example.com", "Your Atlas account has been deactivated: Duplicate account")
+        ("jordan@example.com", "Your Atlas account has been deactivated.")
     ]
 
 

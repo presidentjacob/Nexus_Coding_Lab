@@ -2,6 +2,8 @@
 Do not manufacture audit records in this adapter: production code must write them.
 """
 from types import SimpleNamespace
+from dataclasses import asdict
+from northstar.audit import InMemoryAuditStore
 from northstar.auth import AuthorizationService
 from northstar.events import EventBus
 from northstar.models import Customer
@@ -16,12 +18,13 @@ def build():
     bus = EventBus()
     client = NotificationClient()
     bus.subscribe(CustomerNotificationSubscriber(client))
-    lifecycle = CustomerLifecycleService(repository, AuthorizationService(), bus)
+    audit = InMemoryAuditStore()
+    lifecycle = CustomerLifecycleService(repository, AuthorizationService(), bus, audit)
     return SimpleNamespace(repository=repository, bus=bus, client=client,
-                           lifecycle=lifecycle, audit=[])
+                           lifecycle=lifecycle, audit=audit)
 
 
 def audit_records(system):
     # Return a list of mappings with customer_id, actor_id, reason.
     # Map your real audit objects here if necessary. Never synthesize the answer.
-    return system.audit
+    return [asdict(record) for record in system.audit.records]

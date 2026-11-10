@@ -26,6 +26,13 @@ class Contract(unittest.TestCase):
         self.command(reason="  " + SECRET + "  ")
         self.assertEqual(audit_records(self.s),
             [{"customer_id":"c1", "actor_id":"u-review", "reason":SECRET}])
+    def test_09_five_character_reason_is_trimmed_and_audited(self):
+        result = self.command(reason="  abcde  ")
+        self.assertFalse(result.active)
+        self.assertEqual(audit_records(self.s),
+            [{"customer_id": "c1", "actor_id": "u-review", "reason": "abcde"}])
+        self.assertEqual(self.s.bus.published[0].payload, {"email": "case@example.com"})
+
     def test_04_success_preserves_customer_result(self):
         result = self.command(role="admin")
         self.assertEqual(result.customer_id, "c1")

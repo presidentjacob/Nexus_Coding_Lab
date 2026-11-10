@@ -1,0 +1,69 @@
+test_01_reason_stays_out_of_public_event (test_contract.Contract.test_01_reason_stays_out_of_public_event) ... FAIL
+test_02_customer_gets_generic_notification (test_contract.Contract.test_02_customer_gets_generic_notification) ... FAIL
+test_03_reason_is_retained_in_internal_audit (test_contract.Contract.test_03_reason_is_retained_in_internal_audit) ... FAIL
+test_04_success_preserves_customer_result (test_contract.Contract.test_04_success_preserves_customer_result) ... ok
+test_05_denied_command_has_no_effects (test_contract.Contract.test_05_denied_command_has_no_effects) ... ok
+test_06_short_reason_has_no_effects (test_contract.Contract.test_06_short_reason_has_no_effects) ... ok
+test_07_missing_customer_has_no_effects (test_contract.Contract.test_07_missing_customer_has_no_effects) ... ok
+test_08_notification_failure_does_not_erase_audit (test_contract.Contract.test_08_notification_failure_does_not_erase_audit) ... FAIL
+
+======================================================================
+FAIL: test_01_reason_stays_out_of_public_event (test_contract.Contract.test_01_reason_stays_out_of_public_event)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ryanminor/Documents/School/CS4320/Nexus_Coding_Lab_presidentjacob/nexus2/lab/test_contract.py", line 19, in test_01_reason_stays_out_of_public_event
+    self.assertNotIn(SECRET, repr(self.s.bus.published))
+AssertionError: 'PRIVATE-REASON-42' unexpectedly found in "[DomainEvent(event_type='customer.deactivated', customer_id='c1', payload={'email': 'case@example.com', 'reason': 'PRIVATE-REASON-42'})]"
+
+======================================================================
+FAIL: test_02_customer_gets_generic_notification (test_contract.Contract.test_02_customer_gets_generic_notification)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ryanminor/Documents/School/CS4320/Nexus_Coding_Lab_presidentjacob/nexus2/lab/test_contract.py", line 23, in test_02_customer_gets_generic_notification
+    self.assertEqual(self.s.client.sent_messages,
+AssertionError: Lists differ: [('ca[16 chars] 'Your Atlas account has been deactivated: PRIVATE-REASON-42')] != [('ca[16 chars] 'Your Atlas account has been deactivated.')]
+
+First differing element 0:
+('cas[14 chars], 'Your Atlas account has been deactivated: PRIVATE-REASON-42')
+('cas[14 chars], 'Your Atlas account has been deactivated.')
+
++ [('case@example.com', 'Your Atlas account has been deactivated.')]
+- [('case@example.com',
+-   'Your Atlas account has been deactivated: PRIVATE-REASON-42')]
+
+======================================================================
+FAIL: test_03_reason_is_retained_in_internal_audit (test_contract.Contract.test_03_reason_is_retained_in_internal_audit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ryanminor/Documents/School/CS4320/Nexus_Coding_Lab_presidentjacob/nexus2/lab/test_contract.py", line 27, in test_03_reason_is_retained_in_internal_audit
+    self.assertEqual(audit_records(self.s),
+AssertionError: Lists differ: [] != [{'customer_id': 'c1', 'actor_id': 'u-review', 'reason': 'PRIVATE-REASON-42'}]
+
+Second list contains 1 additional elements.
+First extra element 0:
+{'customer_id': 'c1', 'actor_id': 'u-review', 'reason': 'PRIVATE-REASON-42'}
+
+- []
++ [{'actor_id': 'u-review', 'customer_id': 'c1', 'reason': 'PRIVATE-REASON-42'}]
+
+======================================================================
+FAIL: test_08_notification_failure_does_not_erase_audit (test_contract.Contract.test_08_notification_failure_does_not_erase_audit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ryanminor/Documents/School/CS4320/Nexus_Coding_Lab_presidentjacob/nexus2/lab/test_contract.py", line 53, in test_08_notification_failure_does_not_erase_audit
+    self.assertEqual(audit_records(self.s),
+AssertionError: Lists differ: [] != [{'customer_id': 'c1', 'actor_id': 'u-review', 'reason': 'PRIVATE-REASON-42'}]
+
+Second list contains 1 additional elements.
+First extra element 0:
+{'customer_id': 'c1', 'actor_id': 'u-review', 'reason': 'PRIVATE-REASON-42'}
+
+- []
++ [{'actor_id': 'u-review', 'customer_id': 'c1', 'reason': 'PRIVATE-REASON-42'}]
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.001s
+
+FAILED (failures=4)
+
+Exit code: 1

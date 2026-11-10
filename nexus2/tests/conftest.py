@@ -1,5 +1,6 @@
 import pytest
 
+from northstar.audit import InMemoryAuditStore
 from northstar.auth import AuthorizationService
 from northstar.customer_service import CustomerService
 from northstar.events import EventBus
@@ -46,7 +47,7 @@ def registration(repository, auth, validation, event_bus):
 
 @pytest.fixture
 def lifecycle(repository, auth, event_bus):
-    return CustomerLifecycleService(repository, auth, event_bus)
+    return CustomerLifecycleService(repository, auth, event_bus, InMemoryAuditStore())
 
 
 @pytest.fixture
