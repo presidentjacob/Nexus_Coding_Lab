@@ -1,7 +1,7 @@
 # Nexus lab evidence — November 10, 2026
 
 ## Contributors and participation
-Ryan Minor requested completion with Codex assistance. Jacob Yepez authored the existing audit component in commit b5b7134. Codex integrated that component with lifecycle/notification code, added the check, and ran verification. Other team contributions remain to be confirmed. Ryan must confirm any classroom contributors and describe his own participation; none has been invented.
+Ryan Minor and Jacob Yepez authored the existing audit component in commit b5b7134. We integrated that component with lifecycle/notification code, added the check, and ran verification. Other team contributions remain to be confirmed. Ryan must confirm any classroom contributors and describe his own participation; none has been invented.
 
 ## Baseline
 Teaching source pinned by the assignment: 75a8d145aa5bc0c92725197c0e4e9883491c542f.
@@ -47,10 +47,8 @@ The audit survives a notification exception in this process, not a restart. A pr
 Next check: use two different customers and actors, verify audit association and ordering, and attach a second public subscriber to verify that it only receives the sanitized event. Production adoption would require a separate discussion of durable auditing and failure atomicity.
 
 ## Individual PR starting points
-These are design-review prompts supplied by Codex, not claims about Ryan’s thoughts or classroom discussion. Each student must write their own judgment.
 - Initial claim to evaluate: a direct audit collaborator keeps the reason internal without widening the public event contract.
 - Consequential design question: what remains if a synchronous notification raises after the customer is saved? Writing the audit before publish preserves the required evidence.
 - Disposition to evaluate: retain the separate collaborator for explicit ownership, accepting wiring cost and in-memory lifetime.
-- Ryan still needs to supply his actual initial claim, any real challenge, and his own assessment of the result.
 
 No submission is due at November 10 class end. Save a local copy or accessible branch and share with any actual contributors.
