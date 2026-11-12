@@ -1,29 +1,91 @@
-# Nexus lab evidence
+# Nexus lab evidence — November 10, 2026
 
 ## Contributors and participation
-Names; who typed, traced behavior, designed or checked tests. Ad hoc groups are fine.
+Ryan Minor and Jacob Yepez authored the existing audit component in commit b5b7134. We integrated that component with lifecycle/notification code, added the check, and ran verification.
 
 ## Baseline
-Pinned upstream: 75a8d145aa5bc0c92725197c0e4e9883491c542f.
-Interpreter/version, command, actual output. Expected starter: four passes, four failures.
+Teaching source pinned by the assignment: 75a8d145aa5bc0c92725197c0e4e9883491c542f.
+Interpreter: Python 3.12.1. Commands below ran from nexus2.
+- `python3 -B run_lab.py`: 8 tests, 4 passes and 4 failures (01, 02, 03, 08), exit 1.
+- `python3 -B -m pytest tests`: 23 passed, exit 0.
+Full original output: [contract](evidence-output/baseline-contract.txt), [regression](evidence-output/baseline-regression.txt).
+An initial sandboxed pytest attempt could not create temporary files; rerunning with permitted filesystem access produced the baseline above.
 
 ## Our design decision
-Audit owner and interface; ordering; one credible alternative; accepted benefit/cost.
+The chosen owner is InMemoryAuditStore, injected explicitly into CustomerLifecycleService. Its record_deactivation(customer_id, actor_id, reason) method appends an immutable DeactivationAuditRecord. records returns a list copy for inspection, and the lab adapter converts the actual entries to mappings. Actor.user_id maps to the audit field actor_id.
+
+Order: authorize; find customer; trim and validate reason; deactivate and save; write audit; publish the public event. The synchronous notification subscriber runs during publish, after the audit exists. A notification exception still propagates while the customer remains inactive and the audit remains available. Rejected commands reach none of the writes.
+
+Benefit: audit storage and the public notification path have separate ownership and dependencies. A new public subscriber cannot obtain the reason from this event. Cost: another dependency must be wired, and the service directly depends on a concrete in-memory implementation. A protocol could become useful with a real second backend; none is needed here.
+
+Credible alternative: a service-owned list would reduce wiring but combine lifecycle and audit storage responsibilities. A subscriber on the same public bus is insufficient: it would require broadcasting the confidential information to public observers.
 
 ## Actual changes
-Changed files/functions. What is implemented versus still proposed?
-Explain the sanctioned original notification-test expectation change.
+- src/northstar/audit.py: Jacob’s existing immutable record and in-memory store retained unchanged.
+- src/northstar/services.py: required audit constructor dependency; record after saving and before publishing; public payload contains only email, with customer identity retained on DomainEvent.
+- src/northstar/notifications.py: exact generic deactivation message.
+- lab/adapter.py: inject real audit store and map its real entries.
+- tests/conftest.py: wire the new dependency.
+- tests/test_lifecycle_service.py: change ONLY the old message expectation to `Your Atlas account has been deactivated.` R3 deliberately supersedes the previous reason-bearing expectation. The preserved pre-update run had 22 passes and that one failure; see [conflict](evidence-output/upstream-message-conflict.txt).
+- lab/test_contract.py: preserve all eight supplied checks and add test_09.
+
+Implemented: all R1–R5 behaviors in this prototype. No durable backend or recovery mechanism is proposed as implemented.
 
 ## Our added behavior check
-Conditions, action, expected observable result and reason for choosing it.
+Expected before implementation: a reason of `  abcde  ` must be accepted at the five-character trimmed boundary, retained as exactly `abcde` in one correctly attributed audit record, and absent from the public payload. This catches an erroneous <= 5 comparison or failure to trim the stored value. The added check failed against the starter because audit records were empty; [actual red run](evidence-output/added-check-before-fix.txt). It passes after implementation.
 
 ## Final execution evidence
-Command and actual output. Separate the lab runner from the original pytest suite.
-If a command was not run, say so. Preserve remaining failures and their meaning.
+- `python3 -B run_lab.py`: 9 tests, all OK, exit 0. [Full output](evidence-output/final-contract.txt).
+- `python3 -B -m pytest`: 23 passed, exit 0. [Full output](evidence-output/final-regression.txt). Default pytest discovery covers the original tests; the separate lab runner covers the contract checks.
+No remaining test failures. [Inspectable code diff](evidence-output/implementation.diff); the original commit is retained in Git history.
 
 ## Limitations and next step
-What do the results not establish? What would you check next?
+Team baseline: presidentjacob/Nexus_Coding_Lab at b5b7134525cfbde00747c2d1a94ce2903f8c5240. The preexisting audit component was not yet connected; the actual baseline still had four contract failures.
+
+The audit survives a notification exception in this process, not a restart. A private Python field is not production access control. Audit writes are assumed to succeed. Audit-write failure, concurrent calls, repeat-request deduplication and crash recovery are outside this lab. Each accepted invocation appends once, including an invocation for an already inactive customer; this is not deduplication. No database, encryption, new role, audit read API, retries or deployment was added.
+
+Next check: use two different customers and actors, verify audit association and ordering, and attach a second public subscriber to verify that it only receives the sanitized event. Production adoption would require a separate discussion of durable auditing and failure atomicity.
 
 ## Individual PR starting points
-Each person separately: initial claim, consequential challenge, current disposition.
-Copy the shared code/evidence before leaving. No submission is due at class end.
+- Initial claim to evaluate: a direct audit collaborator keeps the reason internal without widening the public event contract.
+- Consequential design question: what remains if a synchronous notification raises after the customer is saved? Writing the audit before publish preserves the required evidence.
+- Disposition to evaluate: retain the separate collaborator for explicit ownership, accepting wiring cost and in-memory lifetime.
+
+No submission is due at November 10 class end. Save a local copy or accessible branch and share with any actual contributors.
+
+## Persistence update: file-backed audit
+Interpreter for this update: Python 3.13.5 (`python -B`), run from nexus2.
+
+Decision: `FileAuditStore` (src/northstar/audit.py) appends one JSON object per line (`customer_id`, `actor_id`, `reason`) to a path given to its constructor. Each operation opens the file with `with open(...)` and closes it. `records` re-reads the file, so a fresh store object sees earlier entries. `DeactivationAuditRecord` and `InMemoryAuditStore` are unchanged; the in-memory store remains for `tests/conftest.py`. `CustomerLifecycleService` depends on a small `AuditStore` protocol (src/northstar/services.py). The lifecycle order is unchanged: authorize, find customer, validate, deactivate/save, append audit, publish sanitized event.
+
+Test-side changes: `build(audit_path)` injects the file store (lab/adapter.py). Each contract test gets its own `TemporaryDirectory` in `setUp` (lab/test_contract.py). New `test_10_file_audit_persists_across_fresh_store_instances` records a synthetic entry, reopens a new store on the same path, appends a second entry through the new object, then verifies both entries from a third store. `.gitignore` excludes `audit-data/` and `*.audit.jsonl`.
+
+Round-trip check: a reason containing quotes and an embedded newline was read back intact and occupied one line in the file.
+
+Actual output, `python -B run_lab.py` (exit 0):
+```
+test_01_reason_stays_out_of_public_event ... ok
+test_02_customer_gets_generic_notification ... ok
+test_03_reason_is_retained_in_internal_audit ... ok
+test_04_success_preserves_customer_result ... ok
+test_05_denied_command_has_no_effects ... ok
+test_06_short_reason_has_no_effects ... ok
+test_07_missing_customer_has_no_effects ... ok
+test_08_notification_failure_does_not_erase_audit ... ok
+test_09_five_character_reason_is_trimmed_and_audited ... ok
+test_10_file_audit_persists_across_fresh_store_instances ... ok
+Ran 10 tests
+OK
+```
+Actual output, `python -B -m pytest tests` (exit 0): `23 passed in 0.08s`.
+
+Accepted cost: confidential reasons are now stored in plaintext on disk, and reading `records` parses the whole file. Accepted because the requirement is a clean close-and-reopen survival of the audit. This supersedes the earlier statement that the audit survives only in-process.
+
+Remaining limits:
+- File permissions: the file inherits the directory's default OS permissions; any local user or process with read access can see confidential reasons. No encryption.
+- File loss: deletion or corruption of the file loses the audit; there is no backup or replication.
+- Disk failure: no fsync or recovery, so an unflushed append can be lost on power failure.
+- Concurrency: no locking; concurrent writers may interleave or corrupt lines. The store is single-writer.
+- A partially written final line (crash mid-write) makes `records` raise `JSONDecodeError` instead of skipping it.
+- Audit-write failure is still not handled; the lifecycle assumes the append succeeds.
+- No database, rotation, retention policy, or audit read API was added.

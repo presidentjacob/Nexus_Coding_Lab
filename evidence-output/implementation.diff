@@ -1,0 +1,136 @@
+diff --git a/nexus2/lab/adapter.py b/nexus2/lab/adapter.py
+index d60501a..5231ff8 100644
+--- a/nexus2/lab/adapter.py
++++ b/nexus2/lab/adapter.py
+@@ -2,6 +2,8 @@
+ Do not manufacture audit records in this adapter: production code must write them.
+ """
+ from types import SimpleNamespace
++from dataclasses import asdict
++from northstar.audit import InMemoryAuditStore
+ from northstar.auth import AuthorizationService
+ from northstar.events import EventBus
+ from northstar.models import Customer
+@@ -16,12 +18,13 @@ def build():
+     bus = EventBus()
+     client = NotificationClient()
+     bus.subscribe(CustomerNotificationSubscriber(client))
+-    lifecycle = CustomerLifecycleService(repository, AuthorizationService(), bus)
++    audit = InMemoryAuditStore()
++    lifecycle = CustomerLifecycleService(repository, AuthorizationService(), bus, audit)
+     return SimpleNamespace(repository=repository, bus=bus, client=client,
+-                           lifecycle=lifecycle, audit=[])
++                           lifecycle=lifecycle, audit=audit)
+ 
+ 
+ def audit_records(system):
+     # Return a list of mappings with customer_id, actor_id, reason.
+     # Map your real audit objects here if necessary. Never synthesize the answer.
+-    return system.audit
++    return [asdict(record) for record in system.audit.records]
+diff --git a/nexus2/lab/test_contract.py b/nexus2/lab/test_contract.py
+index 47ec5e2..7116c2e 100644
+--- a/nexus2/lab/test_contract.py
++++ b/nexus2/lab/test_contract.py
+@@ -26,6 +26,13 @@ class Contract(unittest.TestCase):
+         self.command(reason="  " + SECRET + "  ")
+         self.assertEqual(audit_records(self.s),
+             [{"customer_id":"c1", "actor_id":"u-review", "reason":SECRET}])
++    def test_09_five_character_reason_is_trimmed_and_audited(self):
++        result = self.command(reason="  abcde  ")
++        self.assertFalse(result.active)
++        self.assertEqual(audit_records(self.s),
++            [{"customer_id": "c1", "actor_id": "u-review", "reason": "abcde"}])
++        self.assertEqual(self.s.bus.published[0].payload, {"email": "case@example.com"})
++
+     def test_04_success_preserves_customer_result(self):
+         result = self.command(role="admin")
+         self.assertEqual(result.customer_id, "c1")
+diff --git a/nexus2/src/northstar/notifications.py b/nexus2/src/northstar/notifications.py
+index ff5039f..9d34691 100644
+--- a/nexus2/src/northstar/notifications.py
++++ b/nexus2/src/northstar/notifications.py
+@@ -23,4 +23,4 @@ class CustomerNotificationSubscriber:
+         if event.event_type == "customer.created":
+             self.client.send(email, f"Welcome to Atlas, {event.payload.get('name', 'customer')}!")
+         elif event.event_type == "customer.deactivated":
+-            self.client.send(email, f"Your Atlas account has been deactivated: {event.payload.get('reason', '')}")
++            self.client.send(email, "Your Atlas account has been deactivated.")
+diff --git a/nexus2/src/northstar/services.py b/nexus2/src/northstar/services.py
+index 318dfb8..c842ada 100644
+--- a/nexus2/src/northstar/services.py
++++ b/nexus2/src/northstar/services.py
+@@ -1,5 +1,6 @@
+ import uuid
+ 
++from .audit import InMemoryAuditStore
+ from .auth import Actor, AuthorizationService
+ from .events import DomainEvent, EventBus
+ from .errors import CustomerNotFoundError
+@@ -57,10 +58,12 @@ class CustomerLifecycleService:
+         repository: CustomerRepository,
+         authorization: AuthorizationService,
+         events: EventBus,
++        audit: InMemoryAuditStore,
+     ) -> None:
+         self._repository = repository
+         self._authorization = authorization
+         self._events = events
++        self._audit = audit
+ 
+     def deactivate(self, actor: Actor, customer_id: str, reason: str) -> Customer:
+         self._authorization.require_customer_management(actor)
+@@ -68,16 +71,18 @@ class CustomerLifecycleService:
+         if customer is None:
+             raise CustomerNotFoundError(customer_id)
+ 
+-        if len(reason.strip()) < 5:
++        clean_reason = reason.strip()
++        if len(clean_reason) < 5:
+             raise ValueError("deactivation reason must contain at least five characters")
+ 
+         customer.active = False
+         self._repository.save(customer)
++        self._audit.record_deactivation(customer.customer_id, actor.user_id, clean_reason)
+         self._events.publish(
+             DomainEvent(
+                 event_type="customer.deactivated",
+                 customer_id=customer.customer_id,
+-                payload={"email": customer.email, "reason": reason.strip()},
++                payload={"email": customer.email},
+             )
+         )
+         return customer
+diff --git a/nexus2/tests/conftest.py b/nexus2/tests/conftest.py
+index d76e818..5eb6c0b 100644
+--- a/nexus2/tests/conftest.py
++++ b/nexus2/tests/conftest.py
+@@ -1,5 +1,6 @@
+ import pytest
+ 
++from northstar.audit import InMemoryAuditStore
+ from northstar.auth import AuthorizationService
+ from northstar.customer_service import CustomerService
+ from northstar.events import EventBus
+@@ -46,7 +47,7 @@ def registration(repository, auth, validation, event_bus):
+ 
+ @pytest.fixture
+ def lifecycle(repository, auth, event_bus):
+-    return CustomerLifecycleService(repository, auth, event_bus)
++    return CustomerLifecycleService(repository, auth, event_bus, InMemoryAuditStore())
+ 
+ 
+ @pytest.fixture
+diff --git a/nexus2/tests/test_lifecycle_service.py b/nexus2/tests/test_lifecycle_service.py
+index 93689fc..557abb1 100644
+--- a/nexus2/tests/test_lifecycle_service.py
++++ b/nexus2/tests/test_lifecycle_service.py
+@@ -32,7 +32,7 @@ def test_deactivate_sends_notification(registration, lifecycle, notifications):
+         "Duplicate account",
+     )
+     assert notifications.sent_messages == [
+-        ("jordan@example.com", "Your Atlas account has been deactivated: Duplicate account")
++        ("jordan@example.com", "Your Atlas account has been deactivated.")
+     ]
+ 
+ 

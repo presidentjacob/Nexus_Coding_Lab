@@ -1,4 +1,5 @@
 import uuid
+from typing import Protocol
 
 from .auth import Actor, AuthorizationService
 from .events import DomainEvent, EventBus
@@ -6,6 +7,10 @@ from .errors import CustomerNotFoundError
 from .models import Customer, CustomerTier
 from .policies import CustomerValidationPolicy
 from .repository import CustomerRepository
+
+
+class AuditStore(Protocol):
+    def record_deactivation(self, customer_id: str, actor_id: str, reason: str) -> None: ...
 
 
 class CustomerRegistrationService:
@@ -57,10 +62,12 @@ class CustomerLifecycleService:
         repository: CustomerRepository,
         authorization: AuthorizationService,
         events: EventBus,
+        audit: AuditStore,
     ) -> None:
         self._repository = repository
         self._authorization = authorization
         self._events = events
+        self._audit = audit
 
     def deactivate(self, actor: Actor, customer_id: str, reason: str) -> Customer:
         self._authorization.require_customer_management(actor)
@@ -68,16 +75,18 @@ class CustomerLifecycleService:
         if customer is None:
             raise CustomerNotFoundError(customer_id)
 
-        if len(reason.strip()) < 5:
+        clean_reason = reason.strip()
+        if len(clean_reason) < 5:
             raise ValueError("deactivation reason must contain at least five characters")
 
         customer.active = False
         self._repository.save(customer)
+        self._audit.record_deactivation(customer.customer_id, actor.user_id, clean_reason)
         self._events.publish(
             DomainEvent(
                 event_type="customer.deactivated",
                 customer_id=customer.customer_id,
-                payload={"email": customer.email, "reason": reason.strip()},
+                payload={"email": customer.email},
             )
         )
         return customer
