@@ -1,7 +1,7 @@
 # Nexus lab evidence — November 10, 2026
 
 ## Contributors and participation
-Ryan Minor and Jacob Yepez authored the existing audit component in commit b5b7134. We integrated that component with lifecycle/notification code, added the check, and ran verification. Other team contributions remain to be confirmed. Ryan must confirm any classroom contributors and describe his own participation; none has been invented.
+Ryan Minor and Jacob Yepez authored the existing audit component in commit b5b7134. We integrated that component with lifecycle/notification code, added the check, and ran verification.
 
 ## Baseline
 Teaching source pinned by the assignment: 75a8d145aa5bc0c92725197c0e4e9883491c542f.
