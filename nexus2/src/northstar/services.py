@@ -1,12 +1,16 @@
 import uuid
+from typing import Protocol
 
-from .audit import InMemoryAuditStore
 from .auth import Actor, AuthorizationService
 from .events import DomainEvent, EventBus
 from .errors import CustomerNotFoundError
 from .models import Customer, CustomerTier
 from .policies import CustomerValidationPolicy
 from .repository import CustomerRepository
+
+
+class AuditStore(Protocol):
+    def record_deactivation(self, customer_id: str, actor_id: str, reason: str) -> None: ...
 
 
 class CustomerRegistrationService:
@@ -58,7 +62,7 @@ class CustomerLifecycleService:
         repository: CustomerRepository,
         authorization: AuthorizationService,
         events: EventBus,
-        audit: InMemoryAuditStore,
+        audit: AuditStore,
     ) -> None:
         self._repository = repository
         self._authorization = authorization

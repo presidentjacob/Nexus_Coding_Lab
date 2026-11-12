@@ -52,3 +52,40 @@ Next check: use two different customers and actors, verify audit association and
 - Disposition to evaluate: retain the separate collaborator for explicit ownership, accepting wiring cost and in-memory lifetime.
 
 No submission is due at November 10 class end. Save a local copy or accessible branch and share with any actual contributors.
+
+## Persistence update: file-backed audit
+Interpreter for this update: Python 3.13.5 (`python -B`), run from nexus2.
+
+Decision: `FileAuditStore` (src/northstar/audit.py) appends one JSON object per line (`customer_id`, `actor_id`, `reason`) to a path given to its constructor. Each operation opens the file with `with open(...)` and closes it. `records` re-reads the file, so a fresh store object sees earlier entries. `DeactivationAuditRecord` and `InMemoryAuditStore` are unchanged; the in-memory store remains for `tests/conftest.py`. `CustomerLifecycleService` depends on a small `AuditStore` protocol (src/northstar/services.py). The lifecycle order is unchanged: authorize, find customer, validate, deactivate/save, append audit, publish sanitized event.
+
+Test-side changes: `build(audit_path)` injects the file store (lab/adapter.py). Each contract test gets its own `TemporaryDirectory` in `setUp` (lab/test_contract.py). New `test_10_file_audit_persists_across_fresh_store_instances` records a synthetic entry, reopens a new store on the same path, appends a second entry through the new object, then verifies both entries from a third store. `.gitignore` excludes `audit-data/` and `*.audit.jsonl`.
+
+Round-trip check: a reason containing quotes and an embedded newline was read back intact and occupied one line in the file.
+
+Actual output, `python -B run_lab.py` (exit 0):
+```
+test_01_reason_stays_out_of_public_event ... ok
+test_02_customer_gets_generic_notification ... ok
+test_03_reason_is_retained_in_internal_audit ... ok
+test_04_success_preserves_customer_result ... ok
+test_05_denied_command_has_no_effects ... ok
+test_06_short_reason_has_no_effects ... ok
+test_07_missing_customer_has_no_effects ... ok
+test_08_notification_failure_does_not_erase_audit ... ok
+test_09_five_character_reason_is_trimmed_and_audited ... ok
+test_10_file_audit_persists_across_fresh_store_instances ... ok
+Ran 10 tests
+OK
+```
+Actual output, `python -B -m pytest tests` (exit 0): `23 passed in 0.08s`.
+
+Accepted cost: confidential reasons are now stored in plaintext on disk, and reading `records` parses the whole file. Accepted because the requirement is a clean close-and-reopen survival of the audit. This supersedes the earlier statement that the audit survives only in-process.
+
+Remaining limits:
+- File permissions: the file inherits the directory's default OS permissions; any local user or process with read access can see confidential reasons. No encryption.
+- File loss: deletion or corruption of the file loses the audit; there is no backup or replication.
+- Disk failure: no fsync or recovery, so an unflushed append can be lost on power failure.
+- Concurrency: no locking; concurrent writers may interleave or corrupt lines. The store is single-writer.
+- A partially written final line (crash mid-write) makes `records` raise `JSONDecodeError` instead of skipping it.
+- Audit-write failure is still not handled; the lifecycle assumes the append succeeds.
+- No database, rotation, retention policy, or audit read API was added.

@@ -1,12 +1,20 @@
 """New teaching requirements, not original repository tests."""
+import os
 import unittest
+from dataclasses import asdict
+from tempfile import TemporaryDirectory
 from adapter import build, audit_records
+from northstar.audit import FileAuditStore
 from northstar.auth import Actor
 from northstar.errors import AuthorizationError, CustomerNotFoundError
 
 SECRET = "PRIVATE-REASON-42"
 class Contract(unittest.TestCase):
-    def setUp(self): self.s = build()
+    def setUp(self):
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.audit_path = os.path.join(tmp.name, "audit.jsonl")
+        self.s = build(self.audit_path)
     def command(self, role="manager", reason=SECRET, customer_id="c1"):
         return self.s.lifecycle.deactivate(Actor("u-review", role), customer_id, reason)
     def test_01_reason_stays_out_of_public_event(self):
@@ -61,5 +69,16 @@ class Contract(unittest.TestCase):
             [{"customer_id":"c1", "actor_id":"u-review", "reason":SECRET}])
         self.assertNotIn(SECRET, repr(self.s.bus.published))
         self.assertEqual(self.s.client.sent_messages, [])
+    def test_10_file_audit_persists_across_fresh_store_instances(self):
+        first = FileAuditStore(self.audit_path)
+        first.record_deactivation("c-synthetic-1", "u-synthetic", "  synthetic first reason  ")
+        reopened = FileAuditStore(self.audit_path)
+        self.assertEqual([asdict(r) for r in reopened.records],
+            [{"customer_id":"c-synthetic-1", "actor_id":"u-synthetic", "reason":"synthetic first reason"}])
+        reopened.record_deactivation("c-synthetic-2", "u-synthetic", "synthetic second reason")
+        final = FileAuditStore(self.audit_path)
+        self.assertEqual([asdict(r) for r in final.records],
+            [{"customer_id":"c-synthetic-1", "actor_id":"u-synthetic", "reason":"synthetic first reason"},
+             {"customer_id":"c-synthetic-2", "actor_id":"u-synthetic", "reason":"synthetic second reason"}])
 
 if __name__ == "__main__": unittest.main()
